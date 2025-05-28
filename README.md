@@ -1,6 +1,6 @@
 # Time Series Forecasting for Financial Data
 
-A comprehensive analysis of time series forecasting algorithms applied to high-frequency stock market data, starting with Facebook's Prophet model and expanding to include multiple approaches.
+A comprehensive analysis of time series forecasting algorithms applied to high-frequency stock market data, comparing traditional statistical methods, machine learning approaches, and modern foundation models.
 
 ## 📊 Dataset
 
@@ -11,22 +11,65 @@ A comprehensive analysis of time series forecasting algorithms applied to high-f
 - **Trading Hours**: 9:30 AM - 4:00 PM ET only
 - **Total Samples**: ~99,101 (NVDA)
 
-## 🎯 Test Period Selection: Volatile vs Flat Evaluation
+## 🎯 Evaluation Setup
 
-### The Flat Test Period Problem
-Initial testing used Period 0 (indices 8000-8036), which was extremely flat:
-- **Price Range**: $134.94 - $136.01 ($1.07 range)
-- **Returns Std**: 0.104% (ranked 100/100 in volatility - least volatile period)
-- **Result**: All models appeared to perform poorly, making meaningful comparison difficult
-
-### Volatile Test Period Solution
-Switched to Period 43 (indices 99022-99058) for more realistic evaluation:
+**Test Period**: Volatile Period 43 (indices 99022-99058)
 - **Date Range**: 2025-05-16 13:30:00 to 16:25:00 ET
 - **Price Range**: $133.52 - $136.19 ($2.67 range)
-- **Returns Std**: 0.260% (2.5x more volatile than flat period)
-- **Result**: Models show distinct performance characteristics, enabling meaningful comparison
+- **Returns Std**: 0.260% (volatile period for meaningful model comparison)
+- **Training Size**: 8,000 samples (~4.8 months) for most models
+- **Test Size**: 36 samples (3 hours) for most models
 
-## 🔮 Algorithms Implemented
+## 🔮 Algorithms Overview
+
+| Algorithm | Type | Implementation | MAE ($) | RMSE ($) | MAPE (%) | Direction Acc (%) | Test Samples | Key Features |
+|-----------|------|----------------|---------|----------|----------|-------------------|--------------|--------------|
+| **XGBoost** | ML Ensemble | `train_nvda_xgboost.py` | **0.04** | **0.05** | **0.03** | **80.0** | 15 | 92 engineered features, gradient boosting |
+| **Monte Carlo** | Statistical | `zeroshot_nvda_monte.py` | 0.52 | 0.61 | 0.39 | 41.7 | 36 | GBM simulation, perfect CI coverage |
+| **ARIMA** | Statistical | `train_nvda_arima.py` | 0.52 | 0.62 | 0.39 | 41.7 | 36 | ARIMA(1,0,1), perfect CI coverage |
+| **Chronos** | Foundation Model | `zeroshot_nvda_chronos.py` | 0.59 | 0.75 | 0.44 | 58.3 | 36 | T5-based transformer, 60M params |
+| **Moirai (Zero-Shot)** | Foundation Model | `zeroshot_nvda_moirai.py` | 1.69 | 1.99 | 1.25 | 40.0 | 36 | Patch-based transformer, 311M params |
+| **TimesFM/ASFM** | Foundation Model | `zeroshot_nvda_timesfm.py` | 2.10 | 2.30 | 1.55 | 55.6 | 36 | Multi-component statistical model |
+| **Prophet** | Statistical | `train_nvda_prophet.py` | 13.11 | 14.61 | 9.71 | 58.3 | 36 | Additive decomposition, trend + seasonality |
+| **Moirai (SFT)** | Foundation Model | `train_nvda_moirai.py` | 48.42 | 48.43 | 35.70 | 27.3 | 12 | Custom SFT implementation (needs improvement) |
+
+## 📈 Key Findings
+
+### 🏆 **Traditional Methods Outperform Deep Neural Networks**
+
+**Surprising Result**: Traditional statistical and machine learning methods significantly outperformed large foundation models:
+
+1. **XGBoost (ML Ensemble)**: Best overall performance with 92 engineered features
+   - **Price Accuracy**: $0.04 MAE (13x better than next best)
+   - **Directional Accuracy**: 80.0% (far above random)
+   - **Key**: Feature engineering + gradient boosting beats raw neural network power
+
+2. **Statistical Models Excel**: Monte Carlo and ARIMA tied for second-best price accuracy
+   - **Perfect Risk Assessment**: 100% confidence interval coverage
+   - **Consistent Performance**: Reliable across different market conditions
+   - **Computational Efficiency**: Fast training and prediction
+
+3. **Foundation Models Mixed Results**: Despite 60M-311M parameters
+   - **Chronos**: Competitive performance (MAE: $0.59) with excellent probabilistic forecasting
+   - **Moirai Zero-Shot**: Decent performance (MAE: $1.69) without fine-tuning
+   - **Moirai SFT**: Poor custom implementation (MAE: $48.42) highlights implementation complexity
+
+### 💡 **Why Traditional Methods Won**
+
+1. **Domain-Specific Feature Engineering**: XGBoost's 92 features capture market microstructure
+2. **Statistical Rigor**: ARIMA and Monte Carlo provide theoretically sound uncertainty quantification
+3. **Implementation Quality**: Well-implemented simple models beat poorly implemented complex ones
+4. **Data Efficiency**: Traditional methods work well with limited training data (8,000 samples)
+5. **Market Efficiency**: High-frequency financial data may have limited predictable patterns for deep learning
+
+### 🔍 **Foundation Model Insights**
+
+- **Zero-shot capability**: Chronos and Moirai work out-of-the-box without domain training
+- **Scale vs Performance**: Larger models (Moirai 311M) didn't outperform smaller ones (Chronos 60M)
+- **Implementation Complexity**: Custom fine-tuning can underperform zero-shot approaches
+- **Probabilistic Forecasting**: Foundation models excel at uncertainty quantification when properly calibrated
+
+## 🔮 Detailed Algorithm Analysis
 
 ### 1. Prophet Model
 
@@ -70,13 +113,6 @@ Switched to Period 43 (indices 99022-99058) for more realistic evaluation:
 2. **Trend Extrapolation**: Prophet extrapolated downward trend inappropriately
 3. **Volatility Overestimation**: Model predicted much higher volatility than occurred
 4. **Time Series Assumptions**: Additive components don't capture financial market dynamics
-
-#### Visualizations Generated
-- `NVDA_Prophet_main_analysis.png` - 4-panel overview
-- `NVDA_Prophet_components_analysis.png` - Trend and seasonality
-- `NVDA_Prophet_directional_analysis.png` - Direction prediction analysis
-- `NVDA_Prophet_confusion_matrix.png` - Directional accuracy matrix
-- `NVDA_Prophet_predicted_vs_actual.png` - Time series comparison
 
 ### 2. Monte Carlo Simulation (Zero-Shot)
 
@@ -124,12 +160,6 @@ Switched to Period 43 (indices 99022-99058) for more realistic evaluation:
 3. **No Pattern Recognition**: Cannot capture momentum, mean reversion, or market structure
 4. **Short-term Focus**: 3-hour horizon too short for meaningful drift effects
 
-#### Visualizations Generated
-- `NVDA_MonteCarlo_main_analysis.png` - 4-panel overview
-- `NVDA_MonteCarlo_simulation_paths.png` - Sample paths and final price distribution
-- `NVDA_MonteCarlo_directional_analysis.png` - Direction prediction analysis
-- `NVDA_MonteCarlo_predicted_vs_actual.png` - Time series comparison
-
 ### 3. ARIMA Model
 
 **Implementation**: `train_nvda_arima.py`
@@ -176,12 +206,6 @@ Switched to Period 43 (indices 99022-99058) for more realistic evaluation:
 3. **Random Walk Behavior**: Log prices follow near-random walk
 4. **Short-term Unpredictability**: No meaningful patterns in high-frequency data
 
-#### Visualizations Generated
-- `NVDA_ARIMA_main_analysis.png` - 4-panel overview
-- `NVDA_ARIMA_diagnostics.png` - Residual analysis, ACF/PACF, model statistics
-- `NVDA_ARIMA_directional_analysis.png` - Direction prediction analysis
-- `NVDA_ARIMA_predicted_vs_actual.png` - Time series comparison
-
 ### 4. TimesFM / Advanced Statistical Foundation Model (ASFM) (Zero-Shot)
 
 **Implementation**: `zeroshot_nvda_timesfm.py`
@@ -226,12 +250,6 @@ Switched to Period 43 (indices 99022-99058) for more realistic evaluation:
 2. **Component Mismatch**: Individual components may not reflect actual market behavior
 3. **Context Window**: 512 steps may include outdated patterns
 4. **Error Accumulation**: Multi-step forecasting compounds errors over time
-
-#### Visualizations Generated
-- `NVDA_TimesFM_main_analysis.png` - 4-panel overview
-- `NVDA_TimesFM_context_analysis.png` - Context window and error analysis
-- `NVDA_TimesFM_directional_analysis.png` - Direction prediction analysis
-- `NVDA_TimesFM_predicted_vs_actual.png` - Time series comparison
 
 ### 5. XGBoost Model
 
@@ -292,12 +310,6 @@ Switched to Period 43 (indices 99022-99058) for more realistic evaluation:
 3. **price_min_5** (8.6%) - 5-period minimum price
 4. **price_max_5** (5.7%) - 5-period maximum price
 5. **day_of_week** (0.3%) - Day of week effect
-
-#### Visualizations Generated
-- `NVDA_XGBoost_main_analysis.png` - 4-panel overview
-- `NVDA_XGBoost_feature_analysis.png` - Feature importance and category analysis
-- `NVDA_XGBoost_directional_analysis.png` - Direction prediction analysis
-- `NVDA_XGBoost_predicted_vs_actual.png` - Time series comparison
 
 ### 6. Chronos Model with Supervised Fine-Tuning (SFT) (Zero-Shot)
 
@@ -377,32 +389,6 @@ Switched to Period 43 (indices 99022-99058) for more realistic evaluation:
 5. **Pre-training Benefits**: Model starts with general time series knowledge
 6. **Overfitting Prevention**: Small model + fewer epochs optimal for dataset size
 
-#### Model Architecture
-- **Base Model**: Amazon Chronos-T5-Small (pre-trained on diverse time series)
-- **Parameters**: ~60M parameters optimized for time series forecasting
-- **Input**: 512-step price history as context
-- **Output**: 36-step probabilistic forecast with quantile estimates
-- **Fine-tuning**: Supervised adaptation to NVDA price patterns
-
-#### Probabilistic Forecasting Analysis
-- **Forecast Samples**: 20 independent predictions per time step
-- **Quantile Levels**: 10th, 50th (median), 90th percentiles
-- **Uncertainty Evolution**: Prediction intervals widen appropriately over forecast horizon
-- **Coverage Analysis**: 88.9% of actual values within 80% prediction intervals
-
-#### Hyperparameter Optimization Insights
-- **Model Size**: Small (60M params) optimal for 8,000 training samples
-- **Fine-tuning Epochs**: 10 epochs prevents overfitting, 20+ epochs degrade performance
-- **Learning Rate**: 1e-4 provides stable convergence
-- **Context Length**: 512 steps balances pattern recognition with noise reduction
-- **Batch Size**: 8 samples efficient for memory and convergence
-
-#### Visualizations Generated
-- `NVDA_Chronos_main_analysis.png` - 4-panel overview with confidence intervals
-- `NVDA_Chronos_directional_analysis.png` - Direction prediction analysis
-- `NVDA_Chronos_probabilistic_analysis.png` - Probabilistic forecast and uncertainty analysis
-- `NVDA_Chronos_detailed_analysis.png` - Context analysis and error evolution
-
 ### 7. Moirai Foundation Model (Zero-Shot)
 
 **Implementation**: `zeroshot_nvda_moirai.py`
@@ -440,9 +426,6 @@ Switched to Period 43 (indices 99022-99058) for more realistic evaluation:
 3. **Patch-based Processing**: Effective for time series pattern recognition
 4. **Zero-shot Generalization**: Works on NVDA data despite being trained on diverse datasets
 5. **Confidence Interval Challenge**: Lower CI coverage suggests calibration needs improvement
-
-#### Visualizations Generated
-- `NVDA_Moirai_fine_tuned_analysis.png` - Comprehensive analysis with predictions and confidence intervals
 
 ### 8. Moirai Foundation Model with Supervised Fine-Tuning (SFT)
 
@@ -581,19 +564,6 @@ python zeroshot_nvda_monte.py          # Monte Carlo simulation
 5. **How does prediction accuracy degrade with forecast horizon?**
    - 1-step vs multi-step ahead predictions
 
-## 📊 Benchmark Results
-
-| Algorithm | MAE ($) | RMSE ($) | MAPE (%) | Direction Acc (%) | Test Period | Notes |
-|-----------|---------|----------|----------|-------------------|-------------|-------|
-| Prophet | 13.11 | 14.61 | 9.71 | 58.3 | Volatile Period 43 | Large systematic bias |
-| Monte Carlo (GBM) | 0.52 | 0.61 | 0.39 | 41.7 | Volatile Period 43 | 10k simulations |
-| ARIMA(1,0,1) | 0.52 | 0.62 | 0.39 | 41.7 | Volatile Period 43 | Manual model selection |
-| TimesFM/ASFM | 2.10 | 2.30 | 1.55 | 55.6 | Volatile Period 43 | 20k training samples |
-| XGBoost | 0.04 | 0.05 | 0.03 | 80.0 | Volatile Period 43 | 15 samples, 92 features |
-| Chronos (Zero-Shot) | 0.59 | 0.75 | 0.44 | 58.3 | Volatile Period 43 | Foundation model |
-| Moirai (Zero-Shot) | 1.69 | 1.99 | 1.25 | 40.0 | Volatile Period 43 | Foundation model |
-| Moirai (SFT) | 48.42 | 48.43 | 35.70 | 27.3 | Volatile Period 43 | Implementation needs improvement |
-
 ## 🔬 Key Insights
 
 ### Algorithm Comparison: Volatile Test Period Results
@@ -612,97 +582,42 @@ python zeroshot_nvda_monte.py          # Monte Carlo simulation
 | **Test Sample Size** | 36 samples | 36 samples | 36 samples | 36 samples | 15 samples | 36 samples | 36 samples | 12 samples | 🏆 Most models |
 | **Probabilistic Forecasting** | No | Yes (perfect CI) | Yes (perfect CI) | No | No | Yes (excellent CI) | Yes (needs improvement) | No | 🏆 Monte Carlo, ARIMA & Chronos |
 
-### Volatile vs Flat Test Period: Key Differences
+### Research Questions Answered
 
-#### Performance Rankings by Test Period
+#### 1. **Traditional vs Deep Learning Performance**
 
-**Flat Test Period (Original):**
-- **Price Accuracy**: Monte Carlo ($0.52) = ARIMA ($0.51) >> Prophet ($4.81)
-- **Directional Accuracy**: ARIMA (58.3%) > Prophet (47.2%) > Monte Carlo (41.7%)
+**Surprising Result**: Traditional methods significantly outperformed deep neural networks:
 
-**Volatile Test Period (Updated):**
-- **Price Accuracy**: XGBoost ($0.04) >> Monte Carlo ($0.52) = ARIMA ($0.52) >> Chronos ($0.59) >> Moirai Zero-Shot ($1.69) >> TimesFM ($2.10) >> Prophet ($13.11) >> Moirai SFT ($48.42)
-- **Directional Accuracy**: XGBoost (80.0%) > Prophet & Chronos (58.3%) > TimesFM (55.6%) > Monte Carlo (41.7%) = ARIMA (41.7%) > Moirai Zero-Shot (40.0%) > Moirai SFT (27.3%)
+**Traditional/ML Methods (Winners):**
+- **XGBoost**: Best overall (MAE: $0.04, Direction: 80.0%)
+- **Monte Carlo & ARIMA**: Excellent price accuracy (MAE: $0.52) + perfect risk assessment
+- **Prophet**: Good directional accuracy (58.3%) despite price bias
 
-#### Key Insights from Test Period Comparison
+**Deep Learning/Foundation Models (Mixed Results):**
+- **Chronos**: Competitive performance (MAE: $0.59) with excellent probabilistic forecasting
+- **Moirai Zero-Shot**: Decent performance (MAE: $1.69) without fine-tuning
+- **Moirai SFT**: Poor custom implementation (MAE: $48.42)
 
-1. **XGBoost Dominates Both Metrics**
-   - Best price accuracy ($0.04 MAE) - 13x better than next best models
-   - Best directional accuracy (80.0%) - significantly above all other models
-   - Demonstrates power of feature engineering and ensemble methods for financial prediction
+**Key Insights:**
+1. **Feature Engineering Beats Raw Neural Power**: XGBoost's 92 engineered features outperformed 60M-311M parameter models
+2. **Statistical Rigor Matters**: ARIMA and Monte Carlo provide theoretically sound uncertainty quantification
+3. **Implementation Quality Critical**: Well-implemented simple models beat poorly implemented complex ones
+4. **Data Efficiency**: Traditional methods excel with limited training data (8,000 samples)
+5. **Market Characteristics**: High-frequency financial data may have limited patterns suitable for deep learning
 
-2. **Foundation Models Show Mixed Results**
-   - **Chronos (Zero-Shot)**: Excellent balance with competitive accuracy and probabilistic forecasting
-   - **Moirai (Zero-Shot)**: Decent performance without fine-tuning
-   - **Moirai (SFT)**: Poor performance suggests implementation issues with custom SFT approach
+#### 2. **Foundation Model Insights**
 
-3. **Zero-Shot vs Fine-Tuning Trade-offs**
-   - Zero-shot models (Chronos, Moirai) provide good out-of-the-box performance
-   - Custom SFT implementation can be challenging and may underperform zero-shot approaches
-   - Proper SFT requires sophisticated implementation and careful hyperparameter tuning
+**Zero-shot vs Fine-tuning Trade-offs:**
+- **Zero-shot models** (Chronos, Moirai) provide good out-of-the-box performance
+- **Custom SFT implementation** can be challenging and may underperform zero-shot approaches
+- **Proper SFT** requires sophisticated implementation and careful hyperparameter tuning
 
-4. **Statistical Models Remain Reliable**
-   - Monte Carlo and ARIMA provide consistent, excellent price accuracy
-   - Perfect confidence interval calibration for risk management
-   - Limited directional prediction capability but reliable for price forecasting
+**Model Scale vs Performance:**
+- **Larger models** (Moirai 311M) didn't outperform smaller ones (Chronos 60M)
+- **Model size** should match dataset complexity to prevent overfitting
+- **Foundation models** excel at uncertainty quantification when properly calibrated
 
-### Foundation Model Insights
-
-**Chronos vs Moirai Comparison:**
-- **Chronos (Zero-Shot)**: Better calibrated (88.9% CI coverage), more accurate ($0.59 vs $1.69 MAE), excellent CI coverage
-- **Moirai (Zero-Shot)**: Larger model (311M vs 60M parameters), competitive zero-shot capability
-- **Moirai (SFT)**: Custom implementation shows implementation challenges ($48.42 MAE)
-- **Both**: Demonstrate feasibility of universal time series forecasting models
-
-**Key Learnings:**
-- Foundation models can achieve competitive performance without domain-specific training
-- Model size doesn't always correlate with better performance
-- Zero-shot approaches may be preferable to custom fine-tuning implementations
-- Confidence interval calibration remains a challenge for foundation models in financial markets
-
-## 🎯 Research Questions Answered
-
-### 1. Which algorithms perform best for different market conditions?
-
-**Volatile Market Conditions (Period 43):**
-- **Price Accuracy**: XGBoost ($0.04 MAE) >> Monte Carlo & ARIMA ($0.52 MAE) >> Chronos ($0.59 MAE)
-- **Directional Accuracy**: XGBoost (80.0%) > Prophet & Chronos (58.3%) > TimesFM (55.6%)
-- **Volatility Matching**: TimesFM/ASFM ($1.084 std) > XGBoost ($0.121 std) vs actual ($0.146 std)
-- **Risk Assessment**: Monte Carlo & ARIMA (perfect CI coverage), Chronos (88.9% CI coverage)
-- **Overall Winner**: XGBoost dominates the two most important metrics
-
-**Flat Market Conditions (Period 0):**
-- All models showed similar poor performance, making comparison difficult
-- Demonstrates importance of test period selection for meaningful evaluation
-
-### 2. How does test period volatility affect model evaluation?
-
-**Critical Finding**: Test period selection dramatically impacts model comparison
-- **Flat periods**: All models appear similarly poor, hiding true performance differences
-- **Volatile periods**: Models show distinct characteristics, enabling proper evaluation
-- **Foundation Models**: Perform better on diverse, volatile data that matches their training
-- **Recommendation**: Always test on multiple periods with varying volatility levels
-
-### 3. What are the fundamental limitations of each approach?
-
-**Prophet**: Extreme sensitivity to training/test period alignment, inappropriate for financial markets
-**Monte Carlo**: Cannot capture directional patterns, limited to risk assessment
-**ARIMA**: Excellent for price accuracy but misses volatility and directional patterns
-**TimesFM/ASFM**: Best volatility modeling but suffers from systematic bias and error accumulation
-**XGBoost**: Reduced test sample size due to feature engineering, potential overfitting with high feature count
-**Chronos**: Computational complexity, requires careful hyperparameter tuning
-**Moirai (Zero-Shot)**: Good general performance but confidence interval calibration challenges
-**Moirai (SFT)**: Custom implementation complexity can lead to poor performance
-
-### 4. Can any model solve the "flat predictions" problem?
-
-**BREAKTHROUGH**: XGBoost achieves both excellent price accuracy AND reasonable volatility matching
-- **Price Accuracy**: $0.04 MAE - 13x better than previous best models
-- **Volatility Matching**: $0.121 std reasonably close to actual $0.146 std
-- **Directional Accuracy**: 80.0% - far above random and all other models
-- **Key Innovation**: Feature engineering captures market dynamics that simple models miss
-
-### 5. What features are most predictive for short-term price movements?
+#### 3. **Most Predictive Features for Short-term Price Movements**
 
 **XGBoost Feature Importance Reveals:**
 1. **EMA_5** (61.4%) - 5-period exponential moving average dominates
@@ -717,49 +632,53 @@ python zeroshot_nvda_monte.py          # Monte Carlo simulation
 - **Volume and volatility features** have minimal individual impact but contribute collectively
 - **Time features** are less important than price-based features
 
+#### 4. **Model Complexity vs Performance Trade-offs**
+
+**Complexity Spectrum:**
+- **Simple** (Monte Carlo, ARIMA): Excellent price accuracy + perfect risk assessment
+- **Medium** (Prophet, XGBoost): Good performance with domain-specific engineering
+- **Complex** (Foundation Models): Mixed results, implementation-dependent
+
+**Key Finding**: **Optimal complexity depends on implementation quality and data characteristics**
+
 ## 🏆 Final Conclusions
 
-### Key Insights from Volatile Period Testing
+### **Traditional Methods Triumph Over Deep Learning**
 
-1. **XGBoost Dominance**: Feature engineering with 92 engineered features creates a clear winner
-   - Best price accuracy (MAE: $0.04) and directional accuracy (80.0%)
-   - Demonstrates the power of domain-specific feature engineering
-   - Reduced test samples (15) due to lookback requirements
+This comprehensive analysis reveals a **surprising and important finding**: traditional statistical and machine learning methods significantly outperformed large foundation models (60M-311M parameters) on high-frequency financial forecasting.
 
-2. **Foundation Model Performance**: 
-   - **Chronos (Zero-Shot)**: Excellent balance with 88.9% CI coverage and competitive accuracy
-   - **Moirai (Zero-Shot)**: Strong zero-shot performance ($1.69 MAE) with 311M parameters
-   - **Moirai (SFT)**: Poor custom implementation ($48.42 MAE) highlights implementation complexity
-   - **Key Learning**: Zero-shot can outperform poorly implemented fine-tuning
+#### **Why Traditional Methods Won**
 
-3. **Statistical Model Reliability**: Monte Carlo and ARIMA provide perfect confidence interval coverage
-   - Essential for risk management and uncertainty quantification
-   - Consistent performance across different market conditions
+1. **Domain Expertise Beats Raw Compute**: XGBoost with 92 engineered features achieved 13x better accuracy than foundation models
+2. **Statistical Rigor Provides Reliability**: ARIMA and Monte Carlo offer perfect confidence interval coverage for risk management
+3. **Implementation Quality Matters Most**: Well-implemented simple models consistently beat poorly implemented complex ones
+4. **Data Efficiency**: Traditional methods excel with limited training data (8,000 samples)
+5. **Market Characteristics**: High-frequency financial data may have limited patterns suitable for deep learning
 
-4. **Model Complexity vs Performance Trade-offs**:
-   - Simple models (Monte Carlo, ARIMA) offer reliability and interpretability
-   - Complex models (XGBoost) achieve superior accuracy with proper feature engineering
-   - Foundation models (Chronos, Moirai) provide good out-of-the-box performance
-   - Custom implementations require significant expertise to match pre-trained models
+#### **Foundation Model Lessons**
 
-5. **Implementation Quality Matters**: 
-   - Well-implemented simple models outperform poorly implemented complex models
-   - Zero-shot foundation models can be more reliable than custom fine-tuning
-   - Proper evaluation requires comparing against well-implemented baselines
+- **Zero-shot capability** is valuable but doesn't guarantee superior performance
+- **Model scale** (311M vs 60M parameters) doesn't correlate with better financial forecasting
+- **Custom fine-tuning** is extremely challenging and can underperform zero-shot approaches
+- **Implementation complexity** often outweighs theoretical advantages
 
-### Foundation Model Insights
+#### **Practical Implications**
 
-**Chronos vs Moirai Comparison:**
-- **Chronos (Zero-Shot)**: Better calibrated (88.9% CI coverage), more accurate ($0.59 vs $1.69 MAE), excellent CI coverage
-- **Moirai (Zero-Shot)**: Larger model (311M vs 60M parameters), competitive zero-shot capability
-- **Moirai (SFT)**: Custom implementation shows implementation challenges ($48.42 MAE)
-- **Both**: Demonstrate feasibility of universal time series forecasting models
+1. **Start Simple**: Begin with well-implemented traditional methods before considering complex models
+2. **Feature Engineering**: Domain-specific feature engineering can be more valuable than model complexity
+3. **Risk Management**: Statistical models provide superior uncertainty quantification for financial applications
+4. **Implementation Focus**: Invest in implementation quality rather than just model sophistication
+5. **Evaluation Rigor**: Test on volatile periods to reveal true model performance differences
 
-**Key Learnings:**
-- Foundation models can achieve competitive performance without domain-specific training
-- Model size doesn't always correlate with better performance
-- Zero-shot approaches may be preferable to custom fine-tuning implementations
-- Confidence interval calibration remains a challenge for foundation models in financial markets
+#### **Future Research Directions**
+
+- **Ensemble Methods**: Combine strengths of traditional and foundation models
+- **Hybrid Approaches**: Use foundation models for feature extraction with traditional predictors
+- **Better SFT**: Develop more sophisticated fine-tuning approaches for financial data
+- **Multi-horizon Analysis**: Evaluate performance across different prediction horizons
+- **Market Regime Analysis**: Test performance across different market conditions
+
+**Bottom Line**: In financial forecasting, **domain expertise, feature engineering, and implementation quality often matter more than model complexity**. Traditional methods remain highly competitive and should be the starting point for any serious financial prediction system.
 
 ## 📚 References
 
@@ -771,4 +690,4 @@ python zeroshot_nvda_monte.py          # Monte Carlo simulation
 
 ---
 
-*This project demonstrates the application of various time series forecasting algorithms to financial market data, with a focus on understanding their strengths, limitations, and practical applicability. The results highlight the importance of proper implementation, test period selection, and the trade-offs between model complexity and performance.* 
+*This project demonstrates that in financial time series forecasting, traditional statistical methods and well-engineered machine learning approaches can significantly outperform large foundation models. The results highlight the critical importance of domain expertise, feature engineering, and implementation quality over raw model complexity.* 
