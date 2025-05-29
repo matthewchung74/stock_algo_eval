@@ -1,4 +1,4 @@
-# When Simple Beats Complex: How Traditional Methods Crushed AI Foundation Models in Stock Price Prediction
+# OG Methods Crushed Transformer Models in Stock Price Prediction
 
 *A comprehensive analysis of 8 forecasting algorithms reveals surprising insights about the limits of deep learning in financial markets*
 
@@ -32,17 +32,18 @@ I tested 8 different approaches on high-frequency NVIDIA stock data (5-minute ba
 ## The Shocking Results: David Wins by a Landslide
 
 Here's what happened when I tested all models on a volatile 3-hour trading period:
-
-| Algorithm | Type | MAE ($) | Direction Accuracy | Key Features |
-|-----------|------|---------|-------------------|--------------|
-| **XGBoost** | ML Ensemble | **$0.04** | **80.0%** | 92 engineered features |
-| **Monte Carlo** | Statistical | $0.52 | 41.7% | Perfect risk assessment |
-| **ARIMA** | Statistical | $0.52 | 41.7% | Perfect confidence intervals |
-| **Chronos** | Foundation Model (60M) | $0.59 | 58.3% | Zero-shot capability |
-| **Moirai (Zero-Shot)** | Foundation Model (311M) | $1.69 | 40.0% | Patch-based transformer |
-| **TimesFM/ASFM** | Foundation Model | $2.10 | 55.6% | Multi-component approach |
-| **Prophet** | Statistical | $13.11 | 58.3% | Trend + seasonality |
-| **Moirai (Fine-tuned)** | Foundation Model | $48.42 | 27.3% | Custom implementation |
++------------------+------------------------+------------+-------------------+------------------------+
+|    Algorithm     |          Type          |  MAE ($)   | Direction Accuracy|     Key Features      |
++------------------+------------------------+------------+-------------------+------------------------+
+| XGBoost          | ML Ensemble            | $0.04      | 80.0%            | 92 engineered features |
+| Monte Carlo      | Statistical            | $0.52      | 41.7%            | Perfect risk assessment|
+| ARIMA            | Statistical            | $0.52      | 41.7%            | Perfect confidence     |
+| Chronos          | Foundation Model (60M) | $0.59      | 58.3%            | Zero-shot capability   |
+| Moirai (Zero-Shot)| Foundation Model (311M)| $1.69     | 40.0%            | Patch-based transformer|
+| TimesFM/ASFM     | Foundation Model       | $2.10      | 55.6%            | Multi-component        |
+| Prophet          | Statistical            | $13.11     | 58.3%            | Trend + seasonality    |
+| Moirai (Fine-tuned)| Foundation Model     | $48.42     | 27.3%            | Custom implementation  |
++------------------+------------------------+------------+-------------------+------------------------+
 
 **The winner?** XGBoost with hand-crafted features achieved **13x better accuracy** than the next best model and **42x better** than the largest foundation model.
 
