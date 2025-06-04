@@ -20,13 +20,13 @@ TEST_SAMPLES = 36     # Number of samples for testing
 # Use a more volatile test period (Period 43 from analysis) - can be toggled
 USE_VOLATILE_PERIOD = True
 VOLATILE_TEST_START_IDX = 99022
-VOLATILE_TEST_END_IDX = 99058
+VOLATILE_TEST_END_IDX = 99122  # Expanded to 100 rows
 
 # XGBoost specific parameters
 LOOKBACK_WINDOW = 20  # Number of previous periods to use as features
-N_ESTIMATORS = 100    # Number of boosting rounds
-MAX_DEPTH = 6         # Maximum tree depth
-LEARNING_RATE = 0.1   # Learning rate
+N_ESTIMATORS = 200    # Number of boosting rounds
+MAX_DEPTH = 8         # Maximum tree depth
+LEARNING_RATE = 0.07   # Learning rate
 
 # Clean up and create organized directory structure for plots
 if os.path.exists('plots/xgboost'):
@@ -40,12 +40,31 @@ print(f"📁 Created directory structure: {plot_dir}")
 print("🚀 Downloading NVDA dataset from Hugging Face...")
 print("Dataset: matthewchung74/nvda_5_min_bars")
 
-# Load the NVDA dataset from Hugging Face
-dataset = load_dataset("matthewchung74/nvda_5_min_bars")
-df_raw = dataset['train'].to_pandas()
-print("✅ Successfully downloaded NVDA dataset from Hugging Face")
-print(f"📊 Dataset shape: {df_raw.shape}")
-print(f"📋 Columns: {list(df_raw.columns)}")
+# Try to load the NVDA dataset from Hugging Face, else fall back to local CSV
+try:
+    from datasets import load_dataset
+    dataset = load_dataset("matthewchung74/nvda_5_min_bars")
+    df_raw = dataset['train'].to_pandas()
+    print("✅ Successfully downloaded NVDA dataset from Hugging Face")
+    print(f"📊 Dataset shape: {df_raw.shape}")
+    print(f"📋 Columns: {list(df_raw.columns)}")
+except Exception as e:
+    print(f"⚠️  Could not load from Hugging Face: {e}")
+    print("📂 Loading NVDA data from local CSV: nvda_5min_bars.csv")
+    df_raw = pd.read_csv("nvda_5min_bars.csv", parse_dates=['timestamp'])
+    # Rename columns to match expected
+    df_raw = df_raw.rename(columns={
+        'timestamp': 'timestamp',
+        'open': 'open',
+        'high': 'high',
+        'low': 'low',
+        'close': 'close',
+        'volume': 'volume',
+        'trade_count': 'trade_count',
+        'vwap': 'vwap'
+    })
+    print(f"✅ Loaded local CSV. Shape: {df_raw.shape}")
+    print(f"📋 Columns: {list(df_raw.columns)}")
 
 # --- Filtering by ET trading hours ---
 temp_et_timestamps = pd.to_datetime(df_raw['timestamp']).dt.tz_convert('America/New_York')
@@ -71,6 +90,8 @@ df['low'] = df_raw['low']
 df['open'] = df_raw['open']
 df['vwap'] = df_raw['vwap']
 df['trade_count'] = df_raw['trade_count']
+# Shift target to T+6 bar's close to match production-ready script
+df['target'] = df['price'].shift(-6)
 
 print(f"\nDataset info:")
 print(f"Date range: {df['ds'].min()} to {df['ds'].max()}")
@@ -139,57 +160,160 @@ print(f"   Training span: ~{training_days:.0f} trading days (~{training_weeks:.1
 # FEATURE ENGINEERING
 # =============================================================================
 
-def create_features(df, lookback_window=LOOKBACK_WINDOW):
-    """Create features for XGBoost model"""
+def create_features(df, lookback_window=20):
+    """Production-ready feature engineering for XGBoost"""
     features_df = df.copy()
-    
-    # Price-based features
-    features_df['returns'] = features_df['price'].pct_change()
-    features_df['log_returns'] = np.log(features_df['price'] / features_df['price'].shift(1))
-    features_df['price_change'] = features_df['price'].diff()
-    
-    # Technical indicators
-    features_df['sma_5'] = features_df['price'].rolling(window=5).mean()
-    features_df['sma_10'] = features_df['price'].rolling(window=10).mean()
-    features_df['sma_20'] = features_df['price'].rolling(window=20).mean()
-    
-    features_df['ema_5'] = features_df['price'].ewm(span=5).mean()
-    features_df['ema_10'] = features_df['price'].ewm(span=10).mean()
-    
-    # Volatility features
-    features_df['volatility_5'] = features_df['returns'].rolling(window=5).std()
-    features_df['volatility_10'] = features_df['returns'].rolling(window=10).std()
-    features_df['volatility_20'] = features_df['returns'].rolling(window=20).std()
-    
-    # Price position features
-    features_df['high_low_ratio'] = features_df['high'] / features_df['low']
-    features_df['close_open_ratio'] = features_df['price'] / features_df['open']
-    features_df['price_to_vwap'] = features_df['price'] / features_df['vwap']
-    
-    # Volume features
-    features_df['volume_sma_5'] = features_df['volume'].rolling(window=5).mean()
-    features_df['volume_sma_10'] = features_df['volume'].rolling(window=10).mean()
+    # Basic features
+    features_df['volume'] = df['volume']
+    features_df['returns'] = df['price'].pct_change()
+    features_df['log_returns'] = np.log(df['price'] / df['price'].shift(1))
+    features_df['price_change'] = df['price'].diff()
+    # RSI
+    def calculate_rsi(prices, period=14):
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        return 100 - (100 / (1 + rs))
+    features_df['rsi_14'] = calculate_rsi(df['price'], 14)
+    features_df['rsi_9'] = calculate_rsi(df['price'], 9)
+    features_df['rsi_21'] = calculate_rsi(df['price'], 21)
+    # MACD
+    def calculate_macd(prices, fast=12, slow=26, signal=9):
+        ema_fast = prices.ewm(span=fast).mean()
+        ema_slow = prices.ewm(span=slow).mean()
+        macd_line = ema_fast - ema_slow
+        signal_line = macd_line.ewm(span=signal).mean()
+        histogram = macd_line - signal_line
+        return macd_line, signal_line, histogram
+    macd, macd_signal, macd_hist = calculate_macd(df['price'])
+    features_df['macd'] = macd
+    features_df['macd_signal'] = macd_signal
+    features_df['macd_histogram'] = macd_hist
+    # Bollinger Bands
+    def calculate_bollinger_bands(prices, period=20, std_dev=2):
+        sma = prices.rolling(window=period).mean()
+        std = prices.rolling(window=period).std()
+        upper_band = sma + (std * std_dev)
+        lower_band = sma - (std * std_dev)
+        return upper_band, lower_band, sma
+    bb_upper, bb_lower, bb_middle = calculate_bollinger_bands(df['price'])
+    features_df['bb_upper'] = bb_upper
+    features_df['bb_lower'] = bb_lower
+    features_df['bb_middle'] = bb_middle
+    features_df['bb_position'] = (df['price'] - bb_lower) / (bb_upper - bb_lower)
+    features_df['bb_width'] = (bb_upper - bb_lower) / bb_middle
+    # Stochastic Oscillator
+    def calculate_stochastic(high, low, close, k_period=14, d_period=3):
+        lowest_low = low.rolling(window=k_period).min()
+        highest_high = high.rolling(window=k_period).max()
+        k_percent = 100 * ((close - lowest_low) / (highest_high - lowest_low))
+        d_percent = k_percent.rolling(window=d_period).mean()
+        return k_percent, d_percent
+    stoch_k, stoch_d = calculate_stochastic(df['high'], df['low'], df['price'])
+    features_df['stoch_k'] = stoch_k
+    features_df['stoch_d'] = stoch_d
+    # Technical indicators - moving averages
+    for period in [5, 10, 20, 50]:
+        features_df[f'sma_{period}'] = df['price'].rolling(period).mean()
+        features_df[f'ema_{period}'] = df['price'].ewm(span=period).mean()
+        features_df[f'volatility_{period}'] = features_df['returns'].rolling(period).std()
+        features_df[f'price_vs_sma_{period}'] = df['price'] / features_df[f'sma_{period}'] - 1
+        features_df[f'price_vs_ema_{period}'] = df['price'] / features_df[f'ema_{period}'] - 1
+    # Volume Rate of Change
+    features_df['volume_roc_5'] = features_df['volume'].pct_change(5)
+    features_df['volume_roc_10'] = features_df['volume'].pct_change(10)
+    # Volume-Weighted Price indicators
+    features_df['vwap_deviation'] = (df['price'] - df['vwap']) / df['vwap']
+    # On-Balance Volume (OBV)
+    def calculate_obv(close, volume):
+        obv = np.zeros(len(close))
+        for i in range(1, len(close)):
+            if close.iloc[i] > close.iloc[i-1]:
+                obv[i] = obv[i-1] + volume.iloc[i]
+            elif close.iloc[i] < close.iloc[i-1]:
+                obv[i] = obv[i-1] - volume.iloc[i]
+            else:
+                obv[i] = obv[i-1]
+        return pd.Series(obv, index=close.index)
+    features_df['obv'] = calculate_obv(df['price'], df['volume'])
+    features_df['obv_sma_10'] = features_df['obv'].rolling(10).mean()
+    features_df['obv_ratio'] = features_df['obv'] / features_df['obv_sma_10']
+    # Bid-Ask Spread proxy using high-low
+    features_df['spread_proxy'] = (df['high'] - df['low']) / df['price']
+    # Price efficiency measures
+    features_df['price_efficiency_5'] = abs(df['price'].pct_change(5)) / features_df['volatility_5']
+    features_df['price_efficiency_10'] = abs(df['price'].pct_change(10)) / features_df['volatility_10']
+    # Advanced Volume Features
+    for period in [5, 10, 20]:
+        features_df[f'volume_sma_{period}'] = features_df['volume'].rolling(period).mean()
+        features_df[f'volume_ema_{period}'] = features_df['volume'].ewm(span=period).mean()
     features_df['volume_ratio'] = features_df['volume'] / features_df['volume_sma_10']
     features_df['volume_price_trend'] = features_df['volume'] * features_df['returns']
-    
-    # Time-based features
+    features_df['volume_momentum_5'] = features_df['volume'].rolling(5).mean() / features_df['volume'].rolling(10).mean()
+    features_df['volume_momentum_10'] = features_df['volume'].rolling(10).mean() / features_df['volume'].rolling(20).mean()
+    # Enhanced OHLC features
+    features_df['high_low_ratio'] = df['high'] / df['low']
+    features_df['close_open_ratio'] = df['price'] / df['open']
+    features_df['price_to_vwap'] = df['price'] / df['vwap']
+    features_df['body_size'] = abs(df['price'] - df['open']) / df['price']
+    features_df['upper_shadow'] = (df['high'] - np.maximum(df['price'], df['open'])) / df['price']
+    features_df['lower_shadow'] = (np.minimum(df['price'], df['open']) - df['low']) / df['price']
+    features_df['total_range'] = (df['high'] - df['low']) / df['price']
+    features_df['gap'] = (df['open'] - df['price'].shift(1)) / df['price'].shift(1)
+    features_df['gap_filled'] = ((df['low'] <= df['price'].shift(1)) & (features_df['gap'] > 0)) | \
+                               ((df['high'] >= df['price'].shift(1)) & (features_df['gap'] < 0))
+    # Enhanced Time Features
     features_df['hour'] = features_df['ds'].dt.hour
-    features_df['minute'] = features_df['ds'].dt.minute
+    features_df['minute'] = features_df['ds'].dt.minute  
     features_df['day_of_week'] = features_df['ds'].dt.dayofweek
     features_df['time_of_day'] = features_df['hour'] * 60 + features_df['minute']
-    
-    # Lagged features
-    for lag in range(1, lookback_window + 1):
-        features_df[f'price_lag_{lag}'] = features_df['price'].shift(lag)
+    features_df['is_market_open'] = features_df['hour'].between(9, 16)
+    features_df['is_power_hour'] = features_df['hour'] == 15
+    features_df['is_first_hour'] = features_df['hour'] == 9
+    features_df['session_progress'] = (features_df['hour'] - 9.5) / 6.5
+    # Multi-timeframe momentum
+    for window in [3, 5, 10, 15, 20]:
+        features_df[f'momentum_{window}'] = df['price'].pct_change(window)
+        features_df[f'momentum_strength_{window}'] = abs(features_df[f'momentum_{window}']) / features_df['volatility_20']
+    # Enhanced Lag features
+    for lag in range(1, 21):
+        features_df[f'price_lag_{lag}'] = df['price'].shift(lag)
         features_df[f'returns_lag_{lag}'] = features_df['returns'].shift(lag)
         features_df[f'volume_lag_{lag}'] = features_df['volume'].shift(lag)
-    
-    # Rolling statistics
+        if lag <= 10:
+            features_df[f'volatility_lag_{lag}'] = features_df['volatility_20'].shift(lag)
+            features_df[f'rsi_lag_{lag}'] = features_df['rsi_14'].shift(lag)
+    # Enhanced Rolling window features
     for window in [5, 10, 20]:
-        features_df[f'price_min_{window}'] = features_df['price'].rolling(window=window).min()
-        features_df[f'price_max_{window}'] = features_df['price'].rolling(window=window).max()
-        features_df[f'price_std_{window}'] = features_df['price'].rolling(window=window).std()
-        
+        features_df[f'price_min_{window}'] = df['price'].rolling(window).min()
+        features_df[f'price_max_{window}'] = df['price'].rolling(window).max()
+        features_df[f'price_std_{window}'] = df['price'].rolling(window).std()
+        features_df[f'price_position_{window}'] = (df['price'] - features_df[f'price_min_{window}']) / \
+                                                 (features_df[f'price_max_{window}'] - features_df[f'price_min_{window}'])
+        if window >= 10:
+            features_df[f'price_volume_corr_{window}'] = df['price'].rolling(window).corr(df['volume'])
+            features_df[f'returns_volume_corr_{window}'] = features_df['returns'].rolling(window).corr(df['volume'])
+    # Volatility regimes
+    features_df['volatility_regime'] = pd.qcut(features_df['volatility_20'].rank(method='first'), 
+                                              q=3, labels=[0, 1, 2]).astype(float)
+    features_df['volume_regime'] = pd.qcut(features_df['volume'].rank(method='first'), 
+                                          q=3, labels=[0, 1, 2]).astype(float)
+    # Trend strength indicators
+    for period in [10, 20]:
+        def rolling_slope(series, window):
+            slopes = []
+            for i in range(len(series)):
+                if i < window - 1:
+                    slopes.append(np.nan)
+                else:
+                    y = series.iloc[i-window+1:i+1].values
+                    x = np.arange(window)
+                    slope = np.polyfit(x, y, 1)[0]
+                    slopes.append(slope)
+            return pd.Series(slopes, index=series.index)
+        features_df[f'trend_strength_{period}'] = rolling_slope(df['price'], period)
+        features_df[f'trend_strength_norm_{period}'] = features_df[f'trend_strength_{period}'] / df['price']
     return features_df
 
 print(f"\n🔧 Creating features for XGBoost model...")
@@ -200,9 +324,9 @@ print(f"   Feature engineering in progress...")
 train_features_df = create_features(train_df)
 test_features_df = create_features(test_df)
 
-# Select feature columns (exclude target and metadata)
+# Select feature columns (exclude target, metadata, and current-bar price/volume/etc.)
 feature_columns = [col for col in train_features_df.columns 
-                  if col not in ['ds', 'price', 'high', 'low', 'open', 'vwap', 'trade_count']]
+                  if col not in ['ds', 'price', 'high', 'low', 'open', 'vwap', 'trade_count', 'target']]
 
 print(f"   Created {len(feature_columns)} features:")
 print(f"   Feature categories:")
@@ -219,19 +343,23 @@ print(f"     - Rolling: {len([c for c in feature_columns if any(x in c for x in 
 
 print(f"\n🤖 Preparing XGBoost training data...")
 
-# Remove rows with NaN values (due to rolling windows and lags)
-train_features_clean = train_features_df.dropna()
-test_features_clean = test_features_df.dropna()
+# Remove rows with NaN values (due to rolling windows, lags, and target shift)
+train_features_clean = train_features_df.dropna(subset=feature_columns + ['target'])
+test_features_clean = test_features_df.dropna(subset=feature_columns + ['target'])
+
+# Add a check for empty test set
+if len(test_features_clean) == 0:
+    raise ValueError("Test set is empty after dropping NaNs. Increase test set size or adjust feature engineering.")
 
 print(f"   Training samples after cleaning: {len(train_features_clean)} (removed {len(train_features_df) - len(train_features_clean)} NaN rows)")
 print(f"   Test samples after cleaning: {len(test_features_clean)} (removed {len(test_features_df) - len(test_features_clean)} NaN rows)")
 
 # Prepare feature matrices
 X_train = train_features_clean[feature_columns].values
-y_train = train_features_clean['price'].values
+y_train = train_features_clean['target'].values
 
 X_test = test_features_clean[feature_columns].values
-y_test = test_features_clean['price'].values
+y_test = test_features_clean['target'].values
 
 print(f"   Training features shape: {X_train.shape}")
 print(f"   Training target shape: {y_train.shape}")

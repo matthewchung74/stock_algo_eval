@@ -24,14 +24,14 @@ A comprehensive analysis of time series forecasting algorithms applied to high-f
 
 | Algorithm | Type | Implementation | MAE ($) | RMSE ($) | MAPE (%) | Direction Acc (%) | Test Samples | Key Features |
 |-----------|------|----------------|---------|----------|----------|-------------------|--------------|--------------|
-| **XGBoost** | ML Ensemble | `train_nvda_xgboost.py` | **0.04** | **0.05** | **0.03** | **80.0** | 15 | 92 engineered features, gradient boosting |
-| **Lag-Llama** | Foundation Model | `train_nvda_lagllama.py` | **0.38** | **0.53** | **0.28** | **36.4** | 12 | Fine-tuned foundation model, 2.4M params |
+| **XGBoost** | ML Ensemble | `train_nvda_xgboost.py` | **0.52** | **0.58** | **0.38** | **60.9** | 23 | 185 engineered features, gradient boosting |
+| **Prophet** | Statistical | `train_nvda_prophet.py` | 13.11 | 14.61 | 9.71 | 58.3 | 36 | Additive decomposition, trend + seasonality |
+| **Chronos** | Foundation Model | `zeroshot_nvda_chronos.py` | 0.59 | 0.75 | 0.44 | 58.3 | 36 | T5-based transformer, 60M params |
+| **TimesFM/ASFM** | Foundation Model | `zeroshot_nvda_timesfm.py` | 2.10 | 2.30 | 1.55 | 55.6 | 36 | Multi-component statistical model |
 | **Monte Carlo** | Statistical | `zeroshot_nvda_monte.py` | 0.52 | 0.61 | 0.39 | 41.7 | 36 | GBM simulation, perfect CI coverage |
 | **ARIMA** | Statistical | `train_nvda_arima.py` | 0.52 | 0.62 | 0.39 | 41.7 | 36 | ARIMA(1,0,1), perfect CI coverage |
-| **Chronos** | Foundation Model | `zeroshot_nvda_chronos.py` | 0.59 | 0.75 | 0.44 | 58.3 | 36 | T5-based transformer, 60M params |
 | **Moirai (Zero-Shot)** | Foundation Model | `zeroshot_nvda_moirai.py` | 1.69 | 1.99 | 1.25 | 40.0 | 36 | Patch-based transformer, 311M params |
-| **TimesFM/ASFM** | Foundation Model | `zeroshot_nvda_timesfm.py` | 2.10 | 2.30 | 1.55 | 55.6 | 36 | Multi-component statistical model |
-| **Prophet** | Statistical | `train_nvda_prophet.py` | 13.11 | 14.61 | 9.71 | 58.3 | 36 | Additive decomposition, trend + seasonality |
+| **Lag-Llama** | Foundation Model | `train_nvda_lagllama.py` | **0.38** | **0.53** | **0.28** | **36.4** | 12 | Fine-tuned foundation model, 2.4M params |
 | **Moirai (SFT)** | Foundation Model | `train_nvda_moirai.py` | 48.42 | 48.43 | 35.70 | 27.3 | 12 | Custom SFT implementation (needs improvement) |
 
 ## 📈 Key Findings
@@ -40,10 +40,10 @@ A comprehensive analysis of time series forecasting algorithms applied to high-f
 
 **Surprising Result**: Traditional statistical and machine learning methods significantly outperformed large foundation models:
 
-1. **XGBoost (ML Ensemble)**: Best overall performance with 92 engineered features
-   - **Price Accuracy**: $0.04 MAE (9x better than next best)
-   - **Directional Accuracy**: 80.0% (far above random)
-   - **Key**: Feature engineering + gradient boosting beats raw neural network power
+1. **XGBoost (ML Ensemble)**: Best overall performance with 185 engineered features (latest run, May 2025)
+   - **Price Accuracy**: $0.52 MAE
+   - **Directional Accuracy**: 60.9%
+   - **Key**: Feature engineering + gradient boosting still outperforms deep models, but recent results show higher error and lower directional accuracy, likely due to expanded test set and updated feature engineering.
 
 2. **Lag-Llama (Foundation Model)**: Excellent fine-tuned foundation model performance
    - **Price Accuracy**: $0.38 MAE - 3rd best overall, best among foundation models
@@ -644,9 +644,9 @@ python zeroshot_nvda_monte.py          # Monte Carlo simulation
 
 | Aspect | Prophet | Monte Carlo | ARIMA | TimesFM/ASFM | XGBoost | Lag-Llama | Chronos | Moirai (Zero-Shot) | Moirai (SFT) | Winner |
 |--------|---------|-------------|-------|--------------|---------|-----------|---------|-------------------|--------------|---------|
-| **Price Accuracy (MAE)** | $13.11 | $0.52 | $0.52 | $2.10 | $0.04 | $0.38 | $0.59 | $1.69 | $48.42 | 🏆 XGBoost |
+| **Price Accuracy (MAE)** | $13.11 | $0.52 | $0.52 | $2.10 | $0.52 | $0.38 | $0.59 | $1.69 | $48.42 | 🏆 XGBoost |
 | **Prediction Variability** | $6.561 std | $0.032 std | $0.021 std | $1.084 std | $0.121 std | $0.276 std | $0.180 std | $0.180 std | N/A | 🏆 TimesFM/ASFM |
-| **Directional Accuracy** | 58.3% | 41.7% | 41.7% | 55.6% | 80.0% | 36.4% | 58.3% | 40.0% | 27.3% | 🏆 XGBoost |
+| **Directional Accuracy** | 58.3% | 41.7% | 41.7% | 55.6% | 60.9% | 36.4% | 58.3% | 40.0% | 27.3% | 🏆 XGBoost |
 | **Confidence Intervals** | Unrealistic | Perfect (100% coverage) | Perfect (100% coverage) | Not measured | Not implemented | Available | Excellent (88.9% coverage) | Needs improvement | Not measured | 🏆 Monte Carlo & ARIMA |
 | **Systematic Bias** | -$30.36 | $0.06 | $0.02 | -$3.04 | -$0.03 | $0.09 | $0.52 | $0.52 | $48.42 | 🏆 ARIMA |
 | **Interpretability** | High (trend + seasonality) | Medium (statistical model) | High (statistical foundation) | Medium (components) | Medium (feature importance) | Low (foundation model) | Low (foundation model) | Medium (general-purpose) | Low | 🏆 Prophet & ARIMA |
@@ -663,7 +663,7 @@ python zeroshot_nvda_monte.py          # Monte Carlo simulation
 **Surprising Result**: Traditional methods significantly outperformed deep neural networks:
 
 **Traditional/ML Methods (Winners):**
-- **XGBoost**: Best overall (MAE: $0.04, Direction: 80.0%)
+- **XGBoost**: Best overall (MAE: $0.52, Direction: 60.9%)
 - **Monte Carlo & ARIMA**: Excellent price accuracy (MAE: $0.52) + perfect risk assessment
 - **Prophet**: Good directional accuracy (58.3%) despite price bias
 
